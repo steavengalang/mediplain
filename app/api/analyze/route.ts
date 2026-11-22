@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI, Type, type Schema } from "@google/genai";
-import type { AnalyzeRequestBody, Language, MediPlainResult } from "@/lib/types";
+import { Type, type Schema } from "@google/genai";
+import { generateWithGeminiFallback, getGeminiApiKey } from "@/lib/gemini";
+import type {
+  AnalyzeRequestBody,
+  ConfidenceLevel,
+  Language,
+  MediPlainResult,
+} from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_LANGUAGES = new Set<Language>(["English", "Indonesian", "Spanish"]);
+const ALLOWED_CONFIDENCE = new Set<ConfidenceLevel>(["High", "Medium", "Low"]);
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
-const GEMINI_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-3.1-flash-lite",
-  "gemini-2.5-flash",
-] as const;
 
 const responseSchema: Schema = {
   type: Type.OBJECT,
@@ -23,6 +24,22 @@ const responseSchema: Schema = {
       description:
         "Clear name of the medication, prescription, or lab report. Set to exactly UNREADABLE_DOCUMENT if the image is blurry, blank, or not a medical document.",
     },
+    documentType: {
+      type: Type.STRING,
+      description:
+        "Concise document category in the target language, e.g., Prescription, Medicine Label, or Lab Report.",
+    },
+    confidenceLevel: {
+      type: Type.STRING,
+      enum: ["High", "Medium", "Low"],
+      description:
+        "How clearly the text and dosing details in the image were readable.",
+    },
+    confidenceNote: {
+      type: Type.STRING,
+      description:
+        "One short plain-language sentence explaining what was clearly readable or partially obscured.",
+    },
     simpleSummary: {
       type: Type.STRING,
       description:
@@ -31,7 +48,7 @@ const responseSchema: Schema = {
     schedule: {
       type: Type.ARRAY,
       description:
-        "Daily medication or action schedule items. Include an empty array if the document is a lab report without dosing instructions.",
+        "Daily medication schedule items ONLY if explicitly visible on the document. Return an empty array [] if no dosage schedule is clearly visible or if the document is a lab report.",
       items: {
         type: Type.OBJECT,
         properties: {
@@ -43,10 +60,29 @@ const responseSchema: Schema = {
           instruction: {
             type: Type.STRING,
             description:
-              "Plain-language instruction for what to do at this time, including dosage and food/water guidance if shown.",
+              "Plain-language instruction for what to do at this time, including exact dosage and food/water guidance shown.",
           },
         },
         required: ["timeOfDay", "instruction"],
+      },
+    },
+    jargonTranslations: {
+      type: Type.ARRAY,
+      description:
+        "2 to 4 medical abbreviations, lab metrics, or pharmaceutical terms found on the document translated into plain 5th-grade language.",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          term: {
+            type: Type.STRING,
+            description: "The technical term, abbreviation, or lab value shown on the document.",
+          },
+          plainMeaning: {
+            type: Type.STRING,
+            description: "Clear 1-sentence plain meaning at a 5th-grade reading level.",
+          },
+        },
+        required: ["term", "plainMeaning"],
       },
     },
     warnings: {
@@ -68,8 +104,12 @@ const responseSchema: Schema = {
   },
   required: [
     "title",
+    "documentType",
+    "confidenceLevel",
+    "confidenceNote",
     "simpleSummary",
     "schedule",
+    "jargonTranslations",
     "warnings",
     "questionsForDoctor",
   ],
@@ -87,8 +127,8 @@ function getTimeOfDayExamples(language: Language): string {
 }
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey || apiKey === "your_api_key_here") {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
     return NextResponse.json(
       { error: "GEMINI_API_KEY is not configured on the server." },
       { status: 500 }
@@ -137,66 +177,39 @@ export async function POST(request: NextRequest) {
 
   const systemInstruction = [
     "You are MediPlain, a compassionate medical accessibility assistant helping elderly patients and caregivers understand prescriptions, medicine labels, and lab reports.",
-    `Respond entirely in ${language} (except for the literal sentinel string UNREADABLE_DOCUMENT if the image is unreadable).`,
-    "Write every explanation at a calm, reassuring 5th-grade reading level. Avoid medical jargon or immediately explain any necessary term in simple words.",
+    `Respond entirely in ${language} (except for the literal enum values High/Medium/Low for confidenceLevel, and the literal sentinel string UNREADABLE_DOCUMENT if the image is unreadable).`,
+    "Write every explanation at a calm, reassuring 5th-grade reading level. Avoid medical jargon or immediately translate it in jargonTranslations.",
     `For schedule.timeOfDay, use concise labels in ${language} such as: ${getTimeOfDayExamples(language)}.`,
-    "Never invent dosages or medical facts that contradict the image. If a detail is partially unclear, tell the patient to confirm it with their pharmacist or doctor in warnings or questionsForDoctor.",
+    "CRITICAL SAFETY RULE: NEVER guess, infer, or hallucinate a dosage schedule if it is not clearly visible on the image. If dosing frequency or amount is missing, cropped, or blurry, return an empty schedule array [] and set confidenceLevel to Medium or Low with an honest confidenceNote telling the patient to verify with a pharmacist.",
+    "Include 2 to 4 jargonTranslations decoding technical terms, Latin abbreviations (e.g., PO, BID, TID, PRN), or lab markers visible on the document.",
     "If the image is completely blurry, blank, dark, or does not contain readable medical, prescription, medicine label, or lab report text, set title to exactly \"UNREADABLE_DOCUMENT\" and briefly explain why in simpleSummary.",
   ].join(" ");
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    let response: Awaited<ReturnType<typeof ai.models.generateContent>> | null =
-      null;
-    let lastError: unknown = null;
-
-    for (const model of GEMINI_MODELS) {
-      try {
-        response = await ai.models.generateContent({
-          model,
-          contents: [
+    const response = await generateWithGeminiFallback(apiKey, {
+      contents: [
+        {
+          role: "user",
+          parts: [
             {
-              role: "user",
-              parts: [
-                {
-                  inlineData: {
-                    mimeType,
-                    data: cleanBase64,
-                  },
-                },
-                {
-                  text: `Analyze this medical document image and return the structured plain-language breakdown in ${language}.`,
-                },
-              ],
+              inlineData: {
+                mimeType,
+                data: cleanBase64,
+              },
+            },
+            {
+              text: `Analyze this medical document image and return the structured plain-language breakdown in ${language}.`,
             },
           ],
-          config: {
-            systemInstruction,
-            responseMimeType: "application/json",
-            responseSchema,
-            temperature: 0.2,
-          },
-        });
-        break;
-      } catch (modelError) {
-        lastError = modelError;
-        const msg =
-          modelError instanceof Error ? modelError.message : String(modelError);
-        console.warn(`MediPlain Gemini model "${model}" failed:`, msg);
-
-        const lowerMsg = msg.toLowerCase();
-        if (
-          lowerMsg.includes("api key not valid") ||
-          lowerMsg.includes("api_key_invalid")
-        ) {
-          throw modelError;
-        }
-      }
-    }
-
-    if (!response) {
-      throw lastError ?? new Error("All Gemini fallback models failed.");
-    }
+        },
+      ],
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema,
+        temperature: 0.2,
+      },
+    });
 
     const rawText = response.text?.trim();
     if (!rawText) {
@@ -237,11 +250,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedConfidence: ConfidenceLevel = ALLOWED_CONFIDENCE.has(
+      parsed.confidenceLevel
+    )
+      ? parsed.confidenceLevel
+      : "Medium";
+
     const sanitized: MediPlainResult = {
       title: parsed.title.trim(),
+      documentType:
+        typeof parsed.documentType === "string" && parsed.documentType.trim()
+          ? parsed.documentType.trim()
+          : "Medical Document",
+      confidenceLevel: normalizedConfidence,
+      confidenceNote:
+        typeof parsed.confidenceNote === "string" && parsed.confidenceNote.trim()
+          ? parsed.confidenceNote.trim()
+          : "Verify dosing details with your pharmacist if any text is unclear.",
       simpleSummary: parsed.simpleSummary.trim(),
       schedule: Array.isArray(parsed.schedule)
         ? parsed.schedule.filter((item) => item?.timeOfDay && item?.instruction)
+        : [],
+      jargonTranslations: Array.isArray(parsed.jargonTranslations)
+        ? parsed.jargonTranslations
+            .filter((item) => item?.term && item?.plainMeaning)
+            .slice(0, 6)
         : [],
       warnings: Array.isArray(parsed.warnings)
         ? parsed.warnings.filter((w) => typeof w === "string" && w.trim().length > 0)

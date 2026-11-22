@@ -96,3 +96,47 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+    size: auto;
+  }
+
+  html,
+  html[data-text-scale="large"],
+  html[data-contrast="high"] {
+    font-size: 10.5pt !important;
+    --bg: #ffffff !important;
+    --surface: #ffffff !important;
+    --surface-subtle: #f7f7f7 !important;
+    --ink: #000000 !important;
+    --ink-muted: #404040 !important;
+    --border: #d4d4d4 !important;
+    --border-strong: #999999 !important;
+    --accent: #000000 !important;
+    --warning-bg: #ffffff !important;
+    --warning-border: #000000 !important;
+    --warning-ink: #000000 !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-grid {
+    display: grid !important;
+    grid-template-columns: 5fr 7fr !important;
+    gap: 1.5rem !important;
+  }
+
+  section,
+  li {
+    break-inside: avoid;
+  }
+}

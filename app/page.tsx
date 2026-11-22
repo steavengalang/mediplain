@@ -1,22 +1,124 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { AccessibilityHeader } from "@/components/AccessibilityHeader";
 import { DisclaimerFooter } from "@/components/DisclaimerFooter";
 import { ResultDashboard } from "@/components/ResultDashboard";
 import { ResultSkeleton } from "@/components/ResultSkeleton";
 import { UploadSection } from "@/components/UploadSection";
-import { SAMPLE_PRESCRIPTIONS, UI_COPY } from "@/lib/i18n";
-import type { Language, MediPlainResult } from "@/lib/types";
+import { SAMPLE_PRESETS, UI_COPY } from "@/lib/i18n";
+import type {
+  Language,
+  MediPlainResult,
+  PresetKey,
+  SavedCareSheet,
+} from "@/lib/types";
 
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const RECENT_SCANS_STORAGE_KEY = "mediplain_recent_scans_v1";
+const MAX_RECENT_SCANS = 5;
 
 const HTML_LANG_CODES: Record<Language, string> = {
   English: "en",
   Indonesian: "id",
   Spanish: "es",
 };
+
+const EMPTY_SCANS: SavedCareSheet[] = [];
+let cachedRawScans: string | null = null;
+let cachedParsedScans: SavedCareSheet[] = EMPTY_SCANS;
+const historyListeners = new Set<() => void>();
+
+function notifyHistoryListeners() {
+  historyListeners.forEach((listener) => listener());
+}
+
+function subscribeToRecentScans(listener: () => void): () => void {
+  historyListeners.add(listener);
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === RECENT_SCANS_STORAGE_KEY) {
+      listener();
+    }
+  };
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", handleStorage);
+  }
+  return () => {
+    historyListeners.delete(listener);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorage);
+    }
+  };
+}
+
+function getRecentScansSnapshot(): SavedCareSheet[] {
+  if (typeof window === "undefined") {
+    return EMPTY_SCANS;
+  }
+  try {
+    const raw = window.localStorage.getItem(RECENT_SCANS_STORAGE_KEY);
+    if (raw === cachedRawScans) {
+      return cachedParsedScans;
+    }
+    cachedRawScans = raw;
+    if (!raw) {
+      cachedParsedScans = EMPTY_SCANS;
+      return EMPTY_SCANS;
+    }
+    const parsed = JSON.parse(raw) as SavedCareSheet[];
+    cachedParsedScans = Array.isArray(parsed)
+      ? parsed.slice(0, MAX_RECENT_SCANS)
+      : EMPTY_SCANS;
+    return cachedParsedScans;
+  } catch {
+    return EMPTY_SCANS;
+  }
+}
+
+function getServerScansSnapshot(): SavedCareSheet[] {
+  return EMPTY_SCANS;
+}
+
+function persistCareSheet(result: MediPlainResult, language: Language) {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = getRecentScansSnapshot();
+    const filtered = existing.filter(
+      (item) =>
+        !(
+          item.result.title === result.title &&
+          item.result.documentType === result.documentType
+        )
+    );
+    const nextEntry: SavedCareSheet = {
+      id: `${Date.now()}`,
+      savedAt: new Date().toISOString(),
+      language,
+      result,
+    };
+    const updated = [nextEntry, ...filtered].slice(0, MAX_RECENT_SCANS);
+    const serialized = JSON.stringify(updated);
+    window.localStorage.setItem(RECENT_SCANS_STORAGE_KEY, serialized);
+    cachedRawScans = serialized;
+    cachedParsedScans = updated;
+    notifyHistoryListeners();
+  } catch {
+    // Ignore storage quota or private browsing errors gracefully.
+  }
+}
+
+function clearPersistedCareSheets() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(RECENT_SCANS_STORAGE_KEY);
+    cachedRawScans = null;
+    cachedParsedScans = EMPTY_SCANS;
+    notifyHistoryListeners();
+  } catch {
+    // Ignore storage errors gracefully.
+  }
+}
 
 function compressImageToJpegBase64(
   file: File,
@@ -59,7 +161,9 @@ function compressImageToJpegBase64(
 
         resolve({ imageBase64, mimeType: "image/jpeg" });
       } catch (err) {
-        reject(err instanceof Error ? err : new Error("Failed to process image."));
+        reject(
+          err instanceof Error ? err : new Error("Failed to process image.")
+        );
       } finally {
         URL.revokeObjectURL(objectUrl);
       }
@@ -84,7 +188,13 @@ export default function HomePage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<MediPlainResult | null>(null);
-  const [isSample, setIsSample] = useState(false);
+  const [activePreset, setActivePreset] = useState<PresetKey | null>(null);
+
+  const recentScans = useSyncExternalStore(
+    subscribeToRecentScans,
+    getRecentScansSnapshot,
+    getServerScansSnapshot
+  );
 
   const copy = UI_COPY[language];
 
@@ -120,8 +230,8 @@ export default function HomePage() {
 
   const handleLanguageChange = (nextLanguage: Language) => {
     setLanguage(nextLanguage);
-    if (isSample) {
-      setResult(SAMPLE_PRESCRIPTIONS[nextLanguage]);
+    if (activePreset) {
+      setResult(SAMPLE_PRESETS[nextLanguage][activePreset]);
     }
   };
 
@@ -142,7 +252,7 @@ export default function HomePage() {
 
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
-    setIsSample(false);
+    setActivePreset(null);
     setResult(null);
   };
 
@@ -193,8 +303,9 @@ export default function HomePage() {
         return;
       }
 
-      setIsSample(false);
+      setActivePreset(null);
       setResult(data);
+      persistCareSheet(data, language);
     } catch (error) {
       setErrorMessage(
         error instanceof Error && error.message
@@ -206,10 +317,17 @@ export default function HomePage() {
     }
   };
 
-  const handleTrySample = () => {
+  const handleSelectPreset = (preset: PresetKey) => {
     setErrorMessage(null);
-    setIsSample(true);
-    setResult(SAMPLE_PRESCRIPTIONS[language]);
+    setActivePreset(preset);
+    setResult(SAMPLE_PRESETS[language][preset]);
+  };
+
+  const handleSelectRecent = (scan: SavedCareSheet) => {
+    setErrorMessage(null);
+    setActivePreset(null);
+    setLanguage(scan.language);
+    setResult(scan.result);
   };
 
   const handleReset = () => {
@@ -219,7 +337,7 @@ export default function HomePage() {
     setSelectedFile(null);
     setPreviewUrl(null);
     setResult(null);
-    setIsSample(false);
+    setActivePreset(null);
     setErrorMessage(null);
   };
 
@@ -240,11 +358,11 @@ export default function HomePage() {
           <ResultSkeleton copy={copy} />
         ) : result ? (
           <ResultDashboard
-            key={`${result.title}-${language}-${isSample ? "sample" : "upload"}`}
+            key={`${result.title}-${language}-${activePreset ?? "doc"}`}
             result={result}
             language={language}
             copy={copy}
-            isSample={isSample}
+            isSample={activePreset !== null}
             previewUrl={previewUrl}
             onReset={handleReset}
           />
@@ -256,10 +374,13 @@ export default function HomePage() {
             fileSizeBytes={selectedFile?.size ?? null}
             isAnalyzing={isAnalyzing}
             errorMessage={errorMessage}
+            recentScans={recentScans}
             onSelectFile={handleSelectFile}
             onClearFile={handleClearFile}
             onAnalyze={handleAnalyze}
-            onTrySample={handleTrySample}
+            onSelectPreset={handleSelectPreset}
+            onSelectRecent={handleSelectRecent}
+            onClearHistory={clearPersistedCareSheets}
           />
         )}
       </main>
