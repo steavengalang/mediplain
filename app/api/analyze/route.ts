@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type, type Schema } from "@google/genai";
 import type { AnalyzeRequestBody, Language, MediPlainResult } from "@/lib/types";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_LANGUAGES = new Set<Language>(["English", "Indonesian", "Spanish"]);
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -81,10 +84,7 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === "your_api_key_here") {
     return NextResponse.json(
-      {
-        error:
-          "Server configuration error: GEMINI_API_KEY is missing. Add your Gemini API key to .env.local and restart the server.",
-      },
+      { error: "GEMINI_API_KEY is not configured on the server." },
       { status: 500 }
     );
   }
@@ -223,11 +223,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(sanitized, { status: 200 });
   } catch (error) {
-    console.error("MediPlain Gemini API error:", error);
-    const message =
-      error instanceof Error && error.message.toLowerCase().includes("api key")
-        ? "Invalid GEMINI_API_KEY. Please verify your API key in .env.local."
-        : "Failed to analyze the image with Gemini. Please check your connection and try again.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    const exactMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+        ? error
+        : "Unknown Gemini API error.";
+    console.error("MediPlain Gemini API error:", exactMessage, error);
+    return NextResponse.json(
+      { error: `Gemini analysis failed: ${exactMessage}` },
+      { status: 500 }
+    );
   }
 }

@@ -18,19 +18,59 @@ const HTML_LANG_CODES: Record<Language, string> = {
   Spanish: "es",
 };
 
-function readFileAsBase64(file: File): Promise<string> {
+function compressImageToJpegBase64(
+  file: File,
+  maxDimension = 1280,
+  quality = 0.8
+): Promise<{ imageBase64: string; mimeType: "image/jpeg" }> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") {
-        reject(new Error("Could not read file."));
-        return;
+    const objectUrl = URL.createObjectURL(file);
+    const img = new window.Image();
+
+    img.onload = () => {
+      try {
+        const { naturalWidth, naturalHeight } = img;
+        const scale = Math.min(
+          1,
+          maxDimension / Math.max(naturalWidth, naturalHeight)
+        );
+        const targetWidth = Math.max(1, Math.round(naturalWidth * scale));
+        const targetHeight = Math.max(1, Math.round(naturalHeight * scale));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Could not initialize image canvas context."));
+          return;
+        }
+
+        // Fill white before JPEG encoding so transparent PNG/WebP backgrounds stay readable.
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        const commaIndex = dataUrl.indexOf(",");
+        const imageBase64 =
+          commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+
+        resolve({ imageBase64, mimeType: "image/jpeg" });
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error("Failed to process image."));
+      } finally {
+        URL.revokeObjectURL(objectUrl);
       }
-      const commaIndex = reader.result.indexOf(",");
-      resolve(commaIndex >= 0 ? reader.result.slice(commaIndex + 1) : reader.result);
     };
-    reader.onerror = () => reject(new Error("Could not read file."));
-    reader.readAsDataURL(file);
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Could not load selected image."));
+    };
+
+    img.src = objectUrl;
   });
 }
 
@@ -122,7 +162,9 @@ export default function HomePage() {
     setErrorMessage(null);
 
     try {
-      const imageBase64 = await readFileAsBase64(selectedFile);
+      const { imageBase64, mimeType } = await compressImageToJpegBase64(
+        selectedFile
+      );
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: {
@@ -130,22 +172,35 @@ export default function HomePage() {
         },
         body: JSON.stringify({
           imageBase64,
-          mimeType: selectedFile.type,
+          mimeType,
           language,
         }),
       });
 
-      const data = (await response.json()) as MediPlainResult & { error?: string };
+      const rawText = await response.text();
+      let data: (MediPlainResult & { error?: string }) | null = null;
+      try {
+        data = JSON.parse(rawText) as MediPlainResult & { error?: string };
+      } catch {
+        data = null;
+      }
 
-      if (!response.ok) {
-        setErrorMessage(data.error || copy.genericError);
+      if (!response.ok || !data) {
+        setErrorMessage(
+          data?.error ||
+            `Server returned ${response.status}. ${copy.genericError}`
+        );
         return;
       }
 
       setIsSample(false);
       setResult(data);
-    } catch {
-      setErrorMessage(copy.genericError);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error && error.message
+          ? error.message
+          : copy.genericError
+      );
     } finally {
       setIsAnalyzing(false);
     }
