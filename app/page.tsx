@@ -180,7 +180,7 @@ export default function HomePage() {
         copy={copy}
       />
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8 sm:py-12">
         {isAnalyzing ? (
           <ResultSkeleton copy={copy} />
         ) : result ? (

@@ -54,45 +54,51 @@ export function UploadSection({
   };
 
   return (
-    <div className="space-y-8">
-      <section className="border-b border-border pb-8 hc-border">
-        <p className="font-mono text-xs font-semibold uppercase tracking-widest text-accent">
-          {copy.heroEyebrow}
-        </p>
-        <h1 className="mt-3 max-w-3xl text-3xl font-bold tracking-tight text-ink sm:text-4xl leading-tight">
-          {copy.heroTitle}
-        </h1>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-          {copy.heroSubtitle}
-        </p>
+    <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12 items-start">
+      <section className="lg:col-span-6 space-y-6">
+        <div className="border-b border-border pb-6">
+          <p className="font-mono text-xs font-semibold uppercase tracking-widest text-accent">
+            {copy.heroEyebrow}
+          </p>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink sm:text-4xl leading-[1.12]">
+            {copy.heroTitle}
+          </h1>
+          <p className="mt-4 text-base leading-relaxed text-ink-muted sm:text-lg">
+            {copy.heroSubtitle}
+          </p>
+        </div>
 
-        <div className="mt-6 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-accent-soft p-4 hc-border">
+        <div className="space-y-3">
           <button
             type="button"
             onClick={onTrySample}
             disabled={isAnalyzing}
-            className="inline-flex min-h-12 items-center gap-2.5 rounded-md border border-accent bg-accent px-5 py-3 text-base font-bold text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50 cursor-pointer hc-border"
+            className="inline-flex min-h-12 items-center gap-2.5 rounded-sm border border-accent bg-accent px-5 py-3 text-base font-bold text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50 cursor-pointer"
           >
             <FileCheck2 className="h-5 w-5 shrink-0" aria-hidden="true" />
             <span>{copy.trySampleButton}</span>
           </button>
-          <p className="text-sm font-medium text-ink">
-            {copy.trySampleHint}
-          </p>
+          <p className="text-sm text-ink-muted">{copy.trySampleHint}</p>
         </div>
+
+        {errorMessage && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 border-l-4 border-danger-border bg-danger-bg px-4 py-3.5 text-danger-ink"
+          >
+            <AlertCircle
+              className="mt-0.5 h-5 w-5 shrink-0"
+              aria-hidden="true"
+            />
+            <p className="text-sm font-medium leading-relaxed">{errorMessage}</p>
+          </div>
+        )}
       </section>
 
-      {errorMessage && (
-        <div
-          role="alert"
-          className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-bg p-4 text-danger-ink hc-border"
-        >
-          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-          <p className="text-sm font-medium leading-relaxed">{errorMessage}</p>
-        </div>
-      )}
-
-      <section aria-label={copy.uploadTitle}>
+      <section
+        aria-label={copy.uploadTitle}
+        className="lg:col-span-6"
+      >
         <input
           ref={inputRef}
           type="file"
@@ -129,93 +135,96 @@ export function UploadSection({
               e.preventDefault();
               setIsDragging(false);
               const dropped = e.dataTransfer.files;
-              if (dropped && dropped.length > 0 && ACCEPTED_TYPES.has(dropped[0].type)) {
+              if (
+                dropped &&
+                dropped.length > 0 &&
+                ACCEPTED_TYPES.has(dropped[0].type)
+              ) {
                 handleFiles(dropped);
               } else if (dropped && dropped.length > 0) {
                 onSelectFile(dropped[0]);
               }
             }}
-            className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-12 text-center transition-colors cursor-pointer hc-border ${
+            className={`flex flex-col items-start justify-center rounded-sm border border-dashed px-6 py-12 transition-colors cursor-pointer sm:px-8 ${
               isDragging
                 ? "border-accent bg-accent-soft"
-                : "border-border-strong bg-surface hover:bg-surface-subtle"
+                : "border-border-strong bg-surface hover:border-ink"
             }`}
           >
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-surface-subtle text-accent hc-border"
+            <Upload
+              className="h-6 w-6 text-accent"
+              strokeWidth={1.75}
               aria-hidden="true"
-            >
-              <Upload className="h-6 w-6" strokeWidth={2} />
-            </div>
-            <h2 className="mt-4 text-xl font-bold text-ink">
+            />
+            <h2 className="mt-4 text-xl font-bold tracking-tight text-ink">
               {copy.uploadTitle}
             </h2>
-            <p className="mt-1.5 text-base text-ink-muted">
+            <p className="mt-1 text-base text-ink-muted">
               {copy.uploadSubtitle}
             </p>
-            <span className="mt-5 inline-flex min-h-11 items-center rounded-md border border-border bg-surface px-4 py-2 text-sm font-semibold text-ink hc-border">
-              {copy.chooseFile}
-            </span>
-            <p className="mt-4 font-mono text-xs text-ink-muted">
-              {copy.uploadFormats}
-            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              <span className="inline-flex min-h-10 items-center rounded-sm border border-border-strong bg-bg px-4 py-2 text-sm font-semibold text-ink">
+                {copy.chooseFile}
+              </span>
+              <span className="font-mono text-xs text-ink-muted">
+                {copy.uploadFormats}
+              </span>
+            </div>
           </div>
         ) : (
-          <div className="rounded-lg border border-border bg-surface p-5 sm:p-6 hc-border">
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-12 md:items-center">
-              <div className="md:col-span-5">
-                <div className="relative overflow-hidden rounded-md border border-border bg-surface-subtle aspect-[4/3] hc-border">
-                  <Image
-                    unoptimized
-                    src={previewUrl}
-                    alt={fileName ? `Preview of ${fileName}` : "Uploaded medical document preview"}
-                    fill
-                    className="object-contain p-2"
+          <div className="rounded-sm border border-border bg-surface p-5 sm:p-6 space-y-5">
+            <div className="relative overflow-hidden rounded-sm border border-border bg-surface-subtle aspect-[4/3]">
+              <Image
+                unoptimized
+                src={previewUrl}
+                alt={
+                  fileName
+                    ? `Preview of ${fileName}`
+                    : "Uploaded medical document preview"
+                }
+                fill
+                className="object-contain p-2"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-baseline justify-between gap-2 border-t border-border pt-4">
+              <p className="truncate text-base font-bold text-ink">
+                {fileName}
+              </p>
+              {fileSizeBytes !== null && (
+                <p className="font-mono text-xs tabular-nums text-ink-muted">
+                  {formatBytes(fileSizeBytes)}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={onAnalyze}
+                disabled={isAnalyzing}
+                className="inline-flex min-h-11 items-center gap-2 rounded-sm border border-accent bg-accent px-5 py-2.5 text-sm font-bold text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-60 cursor-pointer"
+              >
+                {isAnalyzing && (
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
                   />
-                </div>
-              </div>
+                )}
+                <span>
+                  {isAnalyzing ? copy.analyzingButton : copy.analyzeButton}
+                </span>
+              </button>
 
-              <div className="md:col-span-7 space-y-4 min-w-0">
-                <div>
-                  <p className="font-mono text-xs font-semibold uppercase tracking-wider text-ink-muted">
-                    {copy.uploadedBadge}
-                  </p>
-                  <p className="mt-1 truncate text-lg font-bold text-ink">
-                    {fileName}
-                  </p>
-                  {fileSizeBytes !== null && (
-                    <p className="mt-0.5 font-mono text-xs text-ink-muted">
-                      {formatBytes(fileSizeBytes)}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={onAnalyze}
-                    disabled={isAnalyzing}
-                    className="inline-flex min-h-12 items-center gap-2 rounded-md border border-accent bg-accent px-5 py-3 text-base font-bold text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-60 cursor-pointer hc-border"
-                  >
-                    {isAnalyzing && (
-                      <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-                    )}
-                    <span>
-                      {isAnalyzing ? copy.analyzingButton : copy.analyzeButton}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={onClearFile}
-                    disabled={isAnalyzing}
-                    className="inline-flex min-h-12 items-center gap-2 rounded-md border border-border bg-surface px-4 py-3 text-sm font-semibold text-ink transition-colors hover:bg-surface-subtle disabled:opacity-50 cursor-pointer hc-border"
-                  >
-                    <X className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{copy.removeImage}</span>
-                  </button>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={onClearFile}
+                disabled={isAnalyzing}
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-border-strong disabled:opacity-50 cursor-pointer"
+              >
+                <X className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{copy.removeImage}</span>
+              </button>
             </div>
           </div>
         )}

@@ -30,20 +30,19 @@ export function AccessibilityHeader({
   copy,
 }: AccessibilityHeaderProps) {
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface hc-border">
-      <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-accent text-on-accent hc-border"
+    <header className="sticky top-0 z-40 border-b border-border bg-bg">
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-3.5 sm:px-8">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <FileHeart
+            className="h-5 w-5 shrink-0 text-accent"
+            strokeWidth={2}
             aria-hidden="true"
-          >
-            <FileHeart className="h-5 w-5" strokeWidth={2} />
-          </div>
-          <div className="min-w-0">
-            <span className="block text-lg font-bold tracking-tight text-ink leading-none">
+          />
+          <div className="flex flex-wrap items-baseline gap-x-2.5 min-w-0">
+            <span className="text-lg font-bold tracking-tight text-ink">
               MediPlain
             </span>
-            <span className="mt-0.5 block text-xs text-ink-muted truncate">
+            <span className="hidden text-xs text-ink-muted sm:inline">
               {copy.tagline}
             </span>
           </div>
@@ -57,10 +56,10 @@ export function AccessibilityHeader({
             type="button"
             onClick={onToggleLargeText}
             aria-pressed={largeText}
-            className={`inline-flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer hc-border ${
+            className={`inline-flex min-h-10 items-center gap-1.5 rounded-sm border px-3 py-1.5 text-sm font-semibold transition-colors cursor-pointer ${
               largeText
                 ? "border-accent bg-accent text-on-accent"
-                : "border-border bg-surface text-ink hover:bg-surface-subtle"
+                : "border-border bg-surface text-ink hover:border-border-strong"
             }`}
           >
             <Type className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -71,17 +70,17 @@ export function AccessibilityHeader({
             type="button"
             onClick={onToggleHighContrast}
             aria-pressed={highContrast}
-            className={`inline-flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer hc-border ${
+            className={`inline-flex min-h-10 items-center gap-1.5 rounded-sm border px-3 py-1.5 text-sm font-semibold transition-colors cursor-pointer ${
               highContrast
                 ? "border-accent bg-accent text-on-accent"
-                : "border-border bg-surface text-ink hover:bg-surface-subtle"
+                : "border-border bg-surface text-ink hover:border-border-strong"
             }`}
           >
             <Contrast className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{copy.highContrast}</span>
           </button>
 
-          <div className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border bg-surface px-3 py-1.5 hc-border">
+          <div className="inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border bg-surface px-2.5 py-1.5">
             <Globe
               className="h-4 w-4 shrink-0 text-ink-muted"
               aria-hidden="true"
