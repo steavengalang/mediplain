@@ -122,8 +122,8 @@ function clearPersistedCareSheets() {
 
 function compressImageToJpegBase64(
   file: File,
-  maxDimension = 1280,
-  quality = 0.8
+  maxDimension = 1024,
+  quality = 0.75
 ): Promise<{ imageBase64: string; mimeType: "image/jpeg" }> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);

@@ -4,10 +4,10 @@ export const GEMINI_MODELS = [
   "gemini-3.8-flash",
   "gemini-flash-latest",
   "gemini-3.5-flash-lite",
-  "gemini-3.1-flash-lite",
-  "gemini-flash-lite-latest",
-  "gemini-3-flash-preview",
 ] as const;
+
+const TOTAL_BUDGET_MS = 45_000;
+const PER_ATTEMPT_TIMEOUT_MS = 15_000;
 
 export function getGeminiApiKey(): string | null {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -31,15 +31,26 @@ export async function generateWithGeminiFallback(
   params: Omit<GenerateContentParameters, "model">
 ) {
   const ai = new GoogleGenAI({ apiKey, apiVersion: "v1beta" });
-  const triedModels = new Set<string>();
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
   const modelErrors: string[] = [];
 
   for (const model of GEMINI_MODELS) {
-    triedModels.add(model);
+    const remainingMs = deadline - Date.now();
+    if (remainingMs < 3_000) {
+      modelErrors.push(`${model}: skipped due to server time budget`);
+      break;
+    }
+
+    const attemptTimeoutMs = Math.min(PER_ATTEMPT_TIMEOUT_MS, remainingMs);
+
     try {
       return await ai.models.generateContent({
         ...params,
         model,
+        config: {
+          ...params.config,
+          abortSignal: AbortSignal.timeout(attemptTimeoutMs),
+        },
       });
     } catch (modelError) {
       const msg =
@@ -51,52 +62,6 @@ export async function generateWithGeminiFallback(
         throw modelError;
       }
     }
-  }
-
-  // Last-resort dynamic discovery in case account routing exposes a different Flash model ID.
-  try {
-    const pager = await ai.models.list({ config: { pageSize: 50 } });
-    const discoveredFlashModels = pager.page
-      .map((m) => ({
-        id: (m.name ?? "").replace(/^models\//, ""),
-        actions: m.supportedActions ?? [],
-      }))
-      .filter(
-        (m) =>
-          m.id.startsWith("gemini-") &&
-          m.id.includes("flash") &&
-          !m.id.includes("tts") &&
-          !m.id.includes("image") &&
-          !m.id.includes("live") &&
-          !m.id.includes("2.0") &&
-          !m.id.includes("2.5") &&
-          !triedModels.has(m.id) &&
-          (m.actions.length === 0 || m.actions.includes("generateContent"))
-      )
-      .slice(0, 2);
-
-    for (const candidate of discoveredFlashModels) {
-      try {
-        return await ai.models.generateContent({
-          ...params,
-          model: candidate.id,
-        });
-      } catch (discoveredError) {
-        const msg =
-          discoveredError instanceof Error
-            ? discoveredError.message
-            : String(discoveredError);
-        console.warn(
-          `MediPlain discovered model "${candidate.id}" failed:`,
-          msg
-        );
-        modelErrors.push(`${candidate.id}: ${msg}`);
-      }
-    }
-  } catch (listError) {
-    const msg =
-      listError instanceof Error ? listError.message : String(listError);
-    modelErrors.push(`models.list: ${msg}`);
   }
 
   throw new Error(modelErrors.join(" | ") || "All Gemini models failed.");
