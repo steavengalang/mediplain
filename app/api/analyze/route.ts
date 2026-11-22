@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Type, type Schema } from "@google/genai";
-import { generateWithGeminiFallback, getGeminiApiKey } from "@/lib/gemini";
+import {
+  createGeminiErrorResponse,
+  generateWithGeminiFallback,
+  getGeminiApiKey,
+} from "@/lib/gemini";
 import type {
   AnalyzeRequestBody,
   ConfidenceLevel,
@@ -288,16 +292,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(sanitized, { status: 200 });
   } catch (error) {
-    const exactMessage =
-      error instanceof Error
-        ? error.message
-        : typeof error === "string"
-        ? error
-        : "Unknown Gemini API error.";
-    console.error("MediPlain Gemini API error:", exactMessage, error);
-    return NextResponse.json(
-      { error: `Gemini analysis failed: ${exactMessage}` },
-      { status: 500 }
-    );
+    return createGeminiErrorResponse("/api/analyze", error);
   }
 }
