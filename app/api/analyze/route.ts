@@ -8,6 +8,12 @@ export const maxDuration = 60;
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_LANGUAGES = new Set<Language>(["English", "Indonesian", "Spanish"]);
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+const GEMINI_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
+] as const;
 
 const responseSchema: Schema = {
   type: Type.OBJECT,
@@ -81,7 +87,7 @@ function getTimeOfDayExamples(language: Language): string {
 }
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey || apiKey === "your_api_key_here") {
     return NextResponse.json(
       { error: "GEMINI_API_KEY is not configured on the server." },
@@ -120,7 +126,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const cleanBase64 = rawBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, "");
+  const cleanBase64 = rawBase64.replace(/^data:[^;]+;base64,/i, "").trim();
   const estimatedBytes = Math.floor((cleanBase64.length * 3) / 4);
   if (estimatedBytes === 0 || estimatedBytes > MAX_IMAGE_BYTES) {
     return NextResponse.json(
@@ -140,31 +146,57 @@ export async function POST(request: NextRequest) {
 
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [
+    let response: Awaited<ReturnType<typeof ai.models.generateContent>> | null =
+      null;
+    let lastError: unknown = null;
+
+    for (const model of GEMINI_MODELS) {
+      try {
+        response = await ai.models.generateContent({
+          model,
+          contents: [
             {
-              inlineData: {
-                mimeType,
-                data: cleanBase64,
-              },
-            },
-            {
-              text: `Analyze this medical document image and return the structured plain-language breakdown in ${language}.`,
+              role: "user",
+              parts: [
+                {
+                  inlineData: {
+                    mimeType,
+                    data: cleanBase64,
+                  },
+                },
+                {
+                  text: `Analyze this medical document image and return the structured plain-language breakdown in ${language}.`,
+                },
+              ],
             },
           ],
-        },
-      ],
-      config: {
-        systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema,
-        temperature: 0.2,
-      },
-    });
+          config: {
+            systemInstruction,
+            responseMimeType: "application/json",
+            responseSchema,
+            temperature: 0.2,
+          },
+        });
+        break;
+      } catch (modelError) {
+        lastError = modelError;
+        const msg =
+          modelError instanceof Error ? modelError.message : String(modelError);
+        console.warn(`MediPlain Gemini model "${model}" failed:`, msg);
+
+        const lowerMsg = msg.toLowerCase();
+        if (
+          lowerMsg.includes("api key not valid") ||
+          lowerMsg.includes("api_key_invalid")
+        ) {
+          throw modelError;
+        }
+      }
+    }
+
+    if (!response) {
+      throw lastError ?? new Error("All Gemini fallback models failed.");
+    }
 
     const rawText = response.text?.trim();
     if (!rawText) {
