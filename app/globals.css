@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f8f8f5;
+  --surface: #ffffff;
+  --surface-subtle: #eff2ee;
+  --ink: #111816;
+  --ink-muted: #42504c;
+  --border: #d2dad6;
+  --border-strong: #8f9e98;
+  --accent: #0a6656;
+  --accent-hover: #074f43;
+  --on-accent: #ffffff;
+  --accent-soft: #e6f2ef;
+  --warning-bg: #fffbeb;
+  --warning-border: #b45309;
+  --warning-ink: #78350f;
+  --danger-bg: #fef2f2;
+  --danger-border: #b91c1c;
+  --danger-ink: #7f1d1d;
+  --focus-ring: #0a6656;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+html[data-text-scale="large"] {
+  font-size: 20px;
+}
+
+html[data-contrast="high"] {
+  --bg: #000000;
+  --surface: #000000;
+  --surface-subtle: #0d0d0d;
+  --ink: #ffffff;
+  --ink-muted: #ffffff;
+  --border: #ffd700;
+  --border-strong: #ffd700;
+  --accent: #ffd700;
+  --accent-hover: #ffea59;
+  --on-accent: #000000;
+  --accent-soft: #1a1700;
+  --warning-bg: #000000;
+  --warning-border: #ffd700;
+  --warning-ink: #ffd700;
+  --danger-bg: #000000;
+  --danger-border: #ffd700;
+  --danger-ink: #ffffff;
+  --focus-ring: #ffd700;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-warning-ink: var(--warning-ink);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-border: var(--danger-border);
+  --color-danger-ink: var(--danger-ink);
+  --font-sans: var(--font-atkinson-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-atkinson-mono), ui-monospace, monospace;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+*:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+html[data-contrast="high"] .hc-border {
+  border-width: 2px;
+  border-color: #ffd700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
